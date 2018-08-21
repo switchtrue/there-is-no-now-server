@@ -1,22 +1,31 @@
 from flask import render_template, request
 from flask_socketio import emit
 
-from utils.app import get_state
-from utils.redis import reset_all, reset_gyro_data, get_latest_gyro_data, set_data_frequency
+from utils.app import get_state, get_control, get_latest_data
+from utils.redis import (
+    reset_all, reset_gyro_data, set_data_frequency, set_clock_skew,
+    set_outage, reset_max_requests_per_second)
 from utils.response import success
 
-from wsgi import app, socketio
+from wsgi import app
 
 
 @app.route("/")
 def hello():
     state = get_state()
-    return render_template('index.html', connection_count=state['connectionCount'])
+    return render_template('index.html', state=state)
 
 
 @app.route("/api/reset")
 def api_reset_counter():
     reset_all()
+    state = get_state()
+    return success(state)
+
+
+@app.route("/api/reset/max-requests")
+def api_reset_max_requests():
+    reset_max_requests_per_second()
     state = get_state()
     return success(state)
 
@@ -29,45 +38,8 @@ def api_state():
 
 @app.route("/api/gyro/data/latest")
 def api_gyro_data_latest():
-    latest_data = get_latest_gyro_data()
-    print('yy', latest_data)
-
-    max_gamma, max_beta = 0, 0
-    min_gamma, min_beta = 0, 0
-    sum_gamma, sum_beta = 0, 0
-    for data in latest_data:
-        gamma = data['gamma']
-        beta = data['beta']
-
-        sum_gamma += gamma
-        sum_beta += beta
-
-        min_gamma = gamma if gamma < min_gamma else min_gamma
-        min_beta = beta if beta < min_beta else min_beta
-
-        max_gamma = gamma if gamma > max_gamma else max_gamma
-        max_beta = beta if beta > max_beta else max_beta
-
-    data = {
-        'latest': get_latest_gyro_data(),
-        'max': {
-            'gamma': max_gamma,
-            'beta': max_beta,
-        },
-        'min': {
-            'gamma': min_gamma,
-            'beta': min_beta,
-        },
-        'avg': {
-            'gamma': sum_gamma / len(latest_data) if len(latest_data) > 0 else 0,
-            'beta': sum_beta / len(latest_data) if len(latest_data) > 0 else 0,
-        },
-        'sum': {
-            'gamma': sum_gamma,
-            'beta': sum_beta,
-        },
-    }
-    return success(data)
+    latest_data = get_latest_data()
+    return success(latest_data)
 
 
 @app.route("/api/gyro/data/reset")
@@ -77,15 +49,45 @@ def api_gyro_data_reset():
 
 
 @app.route("/api/set-data-frequency")
-def api_gyro_set_frequency():
+def api_set_data_frequency():
     frequency = request.args.get('frequency', 1)
 
     set_data_frequency(frequency)
 
-    data = {
-        'dataFrequency': frequency,
-    }
-    emit('control', data, namespace='/app', broadcast=True)
+    control = get_control()
+    emit('control', control, namespace='/app', broadcast=True)
 
     return success(get_state())
 
+
+@app.route("/api/set-clock-skew")
+def api_set_clock_skew():
+    skew = request.args.get('skew', 1)
+    print(skew)
+
+    set_clock_skew(skew)
+
+    control = get_control()
+    emit('control', control, namespace='/app', broadcast=True)
+
+    return success(get_state())
+
+
+@app.route("/api/outage/create")
+def api_outage_create():
+    set_outage(True)
+
+    control = get_control()
+    emit('control', control, namespace='/app', broadcast=True)
+
+    return success(get_state())
+
+
+@app.route("/api/outage/fix")
+def api_outage_fix():
+    set_outage(False)
+
+    control = get_control()
+    emit('control', control, namespace='/app', broadcast=True)
+
+    return success(get_state())
