@@ -1,10 +1,10 @@
 from flask import render_template, request
 from flask_socketio import emit
 
-from utils.app import get_state, get_control, get_latest_data
+from utils.app import get_state, get_control, get_latest_data, get_requests
 from utils.redis import (
     reset_all, reset_gyro_data, set_data_frequency, set_clock_skew,
-    set_outage, reset_max_requests_per_second)
+    set_outage, reset_max_requests_per_second, set_outage_strategy)
 from utils.response import success
 
 from wsgi import app
@@ -36,6 +36,12 @@ def api_state():
     return success(state)
 
 
+@app.route("/api/requests")
+def api_requests():
+    requests = get_requests()
+    return success(requests)
+
+
 @app.route("/api/gyro/data/latest")
 def api_gyro_data_latest():
     latest_data = get_latest_data()
@@ -63,7 +69,6 @@ def api_set_data_frequency():
 @app.route("/api/set-clock-skew")
 def api_set_clock_skew():
     skew = request.args.get('skew', 1)
-    print(skew)
 
     set_clock_skew(skew)
 
@@ -86,6 +91,18 @@ def api_outage_create():
 @app.route("/api/outage/fix")
 def api_outage_fix():
     set_outage(False)
+
+    control = get_control()
+    emit('control', control, namespace='/app', broadcast=True)
+
+    return success(get_state())
+
+
+@app.route("/api/outage/strategy")
+def api_outage_strategy():
+    strategy = request.args.get('strategy', 'immediate')
+
+    set_outage_strategy(strategy)
 
     control = get_control()
     emit('control', control, namespace='/app', broadcast=True)

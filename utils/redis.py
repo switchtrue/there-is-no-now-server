@@ -17,6 +17,7 @@ GYRO_DATA_5SEC_KEY = 'gyro.data.{}.5sec.{}'
 APP_DATA_FREQUENCY_KEY = 'app.data.frequency'
 APP_CLOCK_SKEW_KEY = 'app.clock.skew'
 SIMULATED_OUTAGE_KEY = 'server.outage'
+OUTAGE_STRATEGY_KEY = 'server.outage.strategy'
 
 __REDIS = None
 
@@ -198,7 +199,6 @@ def get_5sec_data():
     fivesec_key_wildcard = GYRO_DATA_5SEC_KEY.format('*', '*')
     fivesec_keys = redis_conn.keys(fivesec_key_wildcard)
 
-    print('*******')
     if fivesec_keys:
         fivesec_data_raw = redis_conn.mget(fivesec_keys)
 
@@ -206,16 +206,12 @@ def get_5sec_data():
             for raw_data in fivesec_data_raw:
                 data = pickle.loads(raw_data)
                 ts = data['ts']
-                print(ts)
-                print(fivesec_data.keys())
                 if ts not in fivesec_data.keys():
-                    print('reset')
                     fivesec_data[ts] = {'gamma': 0, 'beta': 0}
                 fivesec_data[ts] = {
                     'gamma': fivesec_data[ts]['gamma'] + data['data'][0],
                     'beta': fivesec_data[ts]['beta'] + data['data'][1],
                 }
-    print('--------')
 
                 # print(ts, fivesec_data[ts])
 
@@ -231,6 +227,7 @@ def reset_all():
     __reset_data_frequency()
     __reset_clock_skew()
     __reset_outage()
+    __reset_outage_strategy()
 
 
 def reset_gyro_data():
@@ -302,3 +299,26 @@ def get_outage():
         return True
     else:
         return False
+
+
+def __reset_outage_strategy():
+    redis_conn = __get_redis_conn()
+    redis_conn.set(OUTAGE_STRATEGY_KEY, 0)
+
+
+def set_outage_strategy(outage_strategy):
+    redis_conn = __get_redis_conn()
+    if outage_strategy == 'exponential-backoff':
+        redis_conn.set(OUTAGE_STRATEGY_KEY, 1)
+    else:
+        redis_conn.set(OUTAGE_STRATEGY_KEY, 0)
+
+
+def get_outage_strategy():
+    redis_conn = __get_redis_conn()
+    outage_strategy = redis_conn.get(OUTAGE_STRATEGY_KEY)
+
+    if outage_strategy and int(outage_strategy) == 1:
+        return 'exponential-backoff'
+    else:
+        return 'immediate'

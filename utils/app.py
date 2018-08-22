@@ -2,7 +2,7 @@ import time
 
 from utils.redis import (
     get_connection_count, get_requests_per_second, get_max_requests_per_second, get_data_frequency,
-    get_clock_skew, get_outage, get_latest_gyro_data, get_5sec_data)
+    get_clock_skew, get_outage, get_latest_gyro_data, get_5sec_data, get_outage_strategy)
 
 
 def __avg_requests_per_second():
@@ -23,6 +23,14 @@ def get_state():
         'requestsPerSecond': __avg_requests_per_second(),
         'maxRequestsPerSecond': get_max_requests_per_second(),
         'simulatedOutage': get_outage(),
+        'outageStrategy': get_outage_strategy(),
+    }
+
+
+def get_requests():
+    return {
+        'requestsPerSecond': __avg_requests_per_second(),
+        'maxRequestsPerSecond': get_max_requests_per_second(),
     }
 
 
@@ -31,6 +39,7 @@ def get_control():
         'dataFrequency': get_data_frequency(),
         'clockSkew': get_clock_skew(),
         'simulatedOutage': get_outage(),
+        'outageStrategy': get_outage_strategy(),
     }
 
 
@@ -75,4 +84,17 @@ def get_latest_data():
             'beta': sum_beta,
         },
         'fivesec': fs,
+        'fivesecDelayed': __delay_5sec(fs),
     }
+
+
+def __delay_5sec(fivesec_data):
+    delayed_5sec = {}
+    for k, v in fivesec_data.items():
+        try:
+            delay = fivesec_data[k - 5]
+            delayed_5sec[k] = delay
+        except:
+            pass
+
+    return delayed_5sec
